@@ -1,0 +1,35 @@
+{
+	"info": {
+		"_postman_id": "1700f1ce-3708-4db5-9d12-be359d7c2f59",
+		"name": "test kafka spring boot",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "7250363"
+	},
+	"item": [
+		{
+			"name": "New Request",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/send?message=HelloKafka",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"send"
+					],
+					"query": [
+						{
+							"key": "message",
+							"value": "HelloKafka"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
