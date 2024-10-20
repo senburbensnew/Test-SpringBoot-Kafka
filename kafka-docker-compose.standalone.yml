@@ -1,6 +1,7 @@
 services:
   zookeeper:
     image: zookeeper:3.7.0
+    container_name: zookeeper
     ports:
       - "2181:2181"
     restart: always
@@ -9,6 +10,7 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.3.0
+    container_name: kafka
     ports:
       - "9092:9092"
     environment:
@@ -34,7 +36,7 @@ services:
     
   oracle:
     image: gvenzl/oracle-xe:21-slim
-    #image: gvenzl/oracle-free
+    container_name: oracle
     environment:
       ORACLE_PASSWORD: oracle
       ORACLE_DATABASE: orclpdb1
@@ -80,7 +82,7 @@ services:
     
   redis:
     image: redis:7.0
-    container_name: keycloak_redis
+    container_name: redis
     ports:
       - "6379:6379"
     networks:
@@ -88,7 +90,7 @@ services:
     restart: always
     
   vault:
-    image: vault:1.14.0
+    image: vault:1.13.3
     container_name: vault
     ports:
       - "8200:8200"
@@ -104,9 +106,11 @@ services:
     
 #  spring-boot-consumer-app:
 #    build:
+#    container_name : consumer
 
 #  spring-boot-producer-app:
 #    build: 
+#    container_name : producer
 
 volumes:
   keycloak_data:

@@ -1,0 +1,188 @@
+Kafka Connect can be used to integrate Kafka with a MySQL database. It allows you to capture and stream data changes from MySQL into Kafka topics and vice versa. Here’s how you can set up Kafka Connect with MySQL using Docker.
+
+High-level Steps:
+
+	1.	Set up Kafka and Zookeeper using Docker.
+	2.	Set up MySQL using Docker.
+	3.	Configure Kafka Connect with the Debezium MySQL connector for change data capture (CDC).
+	4.	Set up the connector to stream data from MySQL to Kafka.
+
+Prerequisites:
+
+	•	Docker and Docker Compose installed on your machine.
+
+Step 1: Create a Docker Compose File
+
+First, create a docker-compose.yml file to define services for Kafka, Zookeeper, Kafka Connect, and MySQL.
+
+version: '3'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.0.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.0.1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  connect:
+    image: confluentinc/cp-kafka-connect:7.0.1
+    depends_on:
+      - kafka
+      - mysql
+    ports:
+      - "8083:8083"
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:9092
+      CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      CONNECT_GROUP_ID: "1"
+      CONNECT_CONFIG_STORAGE_TOPIC: connect-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: connect-statuses
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_REST_PORT: 8083
+      CONNECT_PLUGIN_PATH: /usr/share/java
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+    volumes:
+      - ./plugins:/usr/share/java
+
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+
+Breakdown of the Compose File:
+
+	•	Zookeeper: Required by Kafka for managing the brokers.
+	•	Kafka: The Kafka broker, exposed on port 9092.
+	•	Kafka Connect: This service will use the Kafka Connect API to link Kafka with MySQL. It is exposed on port 8083.
+	•	MySQL: A MySQL service running on port 3306, with a predefined database, user, and password.
+
+Step 2: Add the Debezium MySQL Connector
+
+Kafka Connect needs a connector to interface with MySQL. We will use Debezium (a popular open-source tool for CDC).
+
+To use the Debezium MySQL connector in Kafka Connect, you’ll need to download it and make it available to the Kafka Connect service.
+
+	1.	Create a plugins directory in your project root:
+
+mkdir plugins
+
+
+	2.	Download the Debezium MySQL Connector:
+
+wget https://repo1.maven.org/maven2/io/debezium/debezium-connector-mysql/1.9.0.Final/debezium-connector-mysql-1.9.0.Final-plugin.tar.gz
+
+
+	3.	Extract the connector into the plugins directory:
+
+tar -xvzf debezium-connector-mysql-1.9.0.Final-plugin.tar.gz -C plugins
+
+
+
+Step 3: Start the Containers
+
+Once the Docker Compose setup is complete, start all the services by running:
+
+docker-compose up -d
+
+This command will spin up Kafka, Zookeeper, Kafka Connect, and MySQL in Docker containers.
+
+Step 4: Configure Kafka Connect for MySQL
+
+Now that the services are running, you need to create a Kafka Connect configuration for the MySQL source. This configuration tells Kafka Connect how to capture changes from MySQL and send them to Kafka.
+
+You can create the connector via Kafka Connect’s REST API.
+
+	1.	Wait for Kafka Connect to fully start (usually takes a minute or two).
+	2.	Use the following curl command to create the MySQL source connector:
+
+curl -X POST http://localhost:8083/connectors -H "Content-Type: application/json" -d '{
+  "name": "mysql-source-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+    "tasks.max": "1",
+    "database.hostname": "mysql",
+    "database.port": "3306",
+    "database.user": "user",
+    "database.password": "password",
+    "database.server.id": "184054",
+    "database.server.name": "mysql-server",
+    "database.whitelist": "mydb",
+    "database.history.kafka.bootstrap.servers": "kafka:9092",
+    "database.history.kafka.topic": "schema-changes.mydb",
+    "include.schema.changes": "true"
+  }
+}'
+
+Explanation of Configuration:
+
+	•	connector.class: Specifies the Debezium MySQL connector.
+	•	tasks.max: The number of tasks to run. For simplicity, this is set to 1.
+	•	database.hostname: The hostname of the MySQL service (in this case, mysql as defined in the Docker Compose file).
+	•	database.user and database.password: The credentials for connecting to MySQL.
+	•	database.server.name: A logical name for the MySQL database server.
+	•	database.whitelist: Specifies the MySQL database(s) to be monitored.
+	•	database.history.kafka.bootstrap.servers: The Kafka brokers to which the schema changes will be written.
+	•	database.history.kafka.topic: The Kafka topic where schema changes will be published.
+
+Step 5: Verify the Kafka Topics
+
+Once the connector is set up, data from the MySQL database will start streaming into Kafka topics. You can verify this by listing the topics in Kafka:
+
+docker exec -it kafka kafka-topics --list --bootstrap-server kafka:9092
+
+You should see topics such as mysql-server.mydb.<table_name>.
+
+Step 6: Testing the Setup
+
+You can interact with the MySQL database and watch for changes being streamed into Kafka.
+
+	1.	Connect to the MySQL container:
+
+docker exec -it <mysql-container-id> mysql -u user -ppassword
+
+
+	2.	Insert data into the MySQL database:
+
+USE mydb;
+CREATE TABLE test_table (id INT PRIMARY KEY NOT NULL, name VARCHAR(50));
+INSERT INTO test_table (id, name) VALUES (1, 'Kafka Test');
+
+
+	3.	Check Kafka messages:
+You can consume messages from the Kafka topic that corresponds to test_table:
+
+docker exec -it kafka kafka-console-consumer --bootstrap-server kafka:9092 --topic mysql-server.mydb.test_table --from-beginning
+
+
+
+You should see messages representing the inserted data.
+
+Conclusion:
+
+You’ve now set up Kafka Connect with MySQL using Docker. The Kafka Connect service is running with the Debezium MySQL connector, which streams changes from the MySQL database to Kafka topics. You can extend this setup to monitor other tables or databases, or use other connectors for additional systems.
